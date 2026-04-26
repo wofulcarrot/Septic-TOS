@@ -9,6 +9,7 @@ import { TraverseLogo } from "@/app/components/TraverseLogo";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { CopyLinkButton } from "@/app/components/CopyLinkButton";
 import { PaymentSection } from "@/app/components/PaymentSection";
+import { CertSection } from "@/app/components/CertSection";
 
 export const dynamic = "force-dynamic";
 
@@ -116,6 +117,13 @@ export default async function BookingPage({
             feeUSDPaid={booking.feeUSDPaid}
           />
         </Suspense>
+
+        {/* Permit Auto-Filler — only renders for inspected statuses */}
+        <CertSection
+          bookingId={booking.id}
+          status={booking.status}
+          certPayload={booking.certPayloadJson ? JSON.parse(booking.certPayloadJson) : null}
+        />
 
         {/* Status banner */}
         <div

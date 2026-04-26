@@ -108,6 +108,11 @@ model Booking {
   stripePaymentId     String?
   feeUSDPaid          Int?          // dollars (not cents) — what was actually paid
   notes               String?       // internal notes for the pumper
+  // ─── Permit Auto-Filler / certificate generation ───
+  certGeneratedAt     DateTime?     // null until the AI agent has produced the cert PDF
+  certPayloadJson     String?       // full CertAgentOutput as JSON — used to re-render PDF
+  certInspectionPass  Boolean?      // result captured at cert-gen time
+  certSystemNotes     String?       // free-text inspector findings used by the agent
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 }

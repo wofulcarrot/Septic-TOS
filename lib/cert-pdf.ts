@@ -1,0 +1,286 @@
+// Renders the Permit Auto-Filler agent payload into a county-styled PDF
+// certificate. For the demo we produce a single template that visually
+// mimics a county TOS cert; production swaps in the real county AcroForm
+// PDF templates and uses pdf-lib to fill the AcroForm fields directly.
+
+import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import type { CertAgentOutput } from "./cert-agent";
+
+const COPPER = rgb(0.878, 0.478, 0.184);   // #E07A2F
+const NAVY = rgb(0.106, 0.165, 0.290);     // #1B2A4A
+const INK = rgb(0.05, 0.05, 0.05);
+const MUTED = rgb(0.40, 0.40, 0.40);
+const BORDER = rgb(0.80, 0.80, 0.80);
+const PASS = rgb(0.21, 0.66, 0.42);
+const FAIL = rgb(0.85, 0.30, 0.30);
+
+const PAGE_W = 612;   // 8.5"
+const PAGE_H = 792;   // 11"
+const MARGIN = 54;    // 0.75"
+
+export async function renderCertPDF(payload: CertAgentOutput): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const page = doc.addPage([PAGE_W, PAGE_H]);
+
+  const helv = await doc.embedFont(StandardFonts.Helvetica);
+  const helvBold = await doc.embedFont(StandardFonts.HelveticaBold);
+
+  let y = PAGE_H - MARGIN;
+
+  // ─── Header band ───
+  page.drawRectangle({
+    x: 0,
+    y: PAGE_H - 92,
+    width: PAGE_W,
+    height: 92,
+    color: NAVY,
+  });
+  page.drawText("TIME-OF-SALE SEPTIC INSPECTION CERTIFICATE", {
+    x: MARGIN,
+    y: PAGE_H - 50,
+    size: 12,
+    font: helvBold,
+    color: rgb(1, 1, 1),
+  });
+  page.drawText(`${payload.countyJurisdiction} · ${payload.formCode}`, {
+    x: MARGIN,
+    y: PAGE_H - 70,
+    size: 9,
+    font: helv,
+    color: rgb(0.85, 0.85, 0.85),
+  });
+  page.drawRectangle({
+    x: PAGE_W - MARGIN - 130,
+    y: PAGE_H - 78,
+    width: 130,
+    height: 28,
+    color: COPPER,
+  });
+  page.drawText("PREPARED BY TRAVERSE", {
+    x: PAGE_W - MARGIN - 122,
+    y: PAGE_H - 68,
+    size: 8,
+    font: helvBold,
+    color: rgb(1, 1, 1),
+  });
+  page.drawText(`Booking ${payload.preparedBy.includes("·") ? "" : "—"}`, {
+    x: PAGE_W - MARGIN - 122,
+    y: PAGE_H - 78,
+    size: 7,
+    font: helv,
+    color: rgb(1, 1, 1),
+  });
+
+  y = PAGE_H - 120;
+
+  // ─── Result band ───
+  const resultColor = payload.result === "FAIL" ? FAIL : payload.result === "PASS" ? PASS : COPPER;
+  const resultLabel = payload.result === "FAIL"
+    ? "FAILED INSPECTION"
+    : payload.result === "PASS"
+    ? "PASSED INSPECTION"
+    : "PASSED — WITH NOTES";
+
+  page.drawRectangle({
+    x: MARGIN,
+    y: y - 36,
+    width: PAGE_W - 2 * MARGIN,
+    height: 36,
+    color: rgb(0.97, 0.97, 0.97),
+    borderColor: resultColor,
+    borderWidth: 1.5,
+  });
+  page.drawText(resultLabel, {
+    x: MARGIN + 14,
+    y: y - 23,
+    size: 13,
+    font: helvBold,
+    color: resultColor,
+  });
+  page.drawText(`Inspection date: ${payload.inspectionDate}   Valid through: ${payload.validUntil}`, {
+    x: PAGE_W - MARGIN - 240,
+    y: y - 23,
+    size: 9,
+    font: helv,
+    color: MUTED,
+  });
+  y -= 60;
+
+  // ─── Property + parties block ───
+  y = drawSection(page, y, "PROPERTY & PARTIES", helvBold);
+  y = drawKV(page, y, "Address", payload.propertyAddress, helv, helvBold);
+  y = drawKV(page, y, "Parcel ID", payload.parcelId ?? "(needs review)", helv, helvBold, !payload.parcelId);
+  y = drawKV(page, y, "Owner of record", payload.ownerOnTitle, helv, helvBold);
+  y = drawKV(page, y, "Authority", payload.countyJurisdiction, helv, helvBold);
+  y -= 8;
+
+  // ─── Inspector block ───
+  y = drawSection(page, y, "INSPECTOR", helvBold);
+  y = drawKV(page, y, "Name", payload.inspectorName, helv, helvBold);
+  y = drawKV(page, y, "Company", payload.inspectorCompany, helv, helvBold);
+  y -= 8;
+
+  // ─── Findings block ───
+  y = drawSection(page, y, "FINDINGS", helvBold);
+  y = drawKV(page, y, "System age", payload.systemAge, helv, helvBold);
+  if (payload.withinSurfaceWaterBuffer !== null) {
+    y = drawKV(
+      page,
+      y,
+      "300-ft surface water rule",
+      payload.withinSurfaceWaterBuffer ? "Yes — TOS applies" : "No — outside buffer",
+      helv,
+      helvBold,
+    );
+  }
+  y -= 4;
+
+  y = drawWrappedBlock(page, y, "Result rationale", payload.resultRationale, helv, helvBold);
+  y -= 4;
+  y = drawWrappedBlock(page, y, "Inspector notes", payload.systemNotes, helv, helvBold);
+  y -= 4;
+  y = drawWrappedBlock(page, y, "Recommended action", payload.recommendedAction, helv, helvBold);
+
+  y -= 8;
+
+  // ─── Escalations (if any) ───
+  if (payload.escalations.length > 0) {
+    y = drawSection(page, y, "ITEMS FOR HUMAN REVIEW", helvBold, COPPER);
+    for (const e of payload.escalations) {
+      y = drawWrappedBlock(page, y, `· ${e.field}`, e.reason, helv, helvBold);
+    }
+    y -= 4;
+  }
+
+  // ─── Footer ───
+  page.drawLine({
+    start: { x: MARGIN, y: 96 },
+    end: { x: PAGE_W - MARGIN, y: 96 },
+    thickness: 0.5,
+    color: BORDER,
+  });
+  page.drawText(`Prepared by: ${payload.preparedBy}`, {
+    x: MARGIN,
+    y: 78,
+    size: 8,
+    font: helv,
+    color: MUTED,
+  });
+  const sourceLabel = payload.source === "anthropic"
+    ? "Generated by Claude · Reviewed by inspector before submission"
+    : "Generated in demo mode (deterministic stub) · Reviewed by inspector before submission";
+  page.drawText(sourceLabel, {
+    x: MARGIN,
+    y: 64,
+    size: 7,
+    font: helv,
+    color: MUTED,
+  });
+  page.drawText("traverserts.com", {
+    x: PAGE_W - MARGIN - 70,
+    y: 64,
+    size: 8,
+    font: helvBold,
+    color: COPPER,
+  });
+
+  return doc.save();
+}
+
+// ─── Layout helpers ────────────────────────────────────────────────────
+
+function drawSection(
+  page: PDFPage,
+  y: number,
+  label: string,
+  fontBold: PDFFont,
+  accent = NAVY,
+): number {
+  page.drawText(label, {
+    x: MARGIN,
+    y: y - 12,
+    size: 9,
+    font: fontBold,
+    color: accent,
+  });
+  page.drawLine({
+    start: { x: MARGIN, y: y - 18 },
+    end: { x: PAGE_W - MARGIN, y: y - 18 },
+    thickness: 0.5,
+    color: BORDER,
+  });
+  return y - 28;
+}
+
+function drawKV(
+  page: PDFPage,
+  y: number,
+  key: string,
+  value: string,
+  font: PDFFont,
+  fontBold: PDFFont,
+  highlight = false,
+): number {
+  page.drawText(key.toUpperCase(), {
+    x: MARGIN,
+    y: y - 10,
+    size: 7.5,
+    font: fontBold,
+    color: MUTED,
+  });
+  const truncated = value.length > 90 ? value.slice(0, 87) + "…" : value;
+  page.drawText(truncated, {
+    x: MARGIN + 110,
+    y: y - 10,
+    size: 9.5,
+    font: highlight ? fontBold : font,
+    color: highlight ? COPPER : INK,
+  });
+  return y - 18;
+}
+
+function drawWrappedBlock(
+  page: PDFPage,
+  y: number,
+  label: string,
+  value: string,
+  font: PDFFont,
+  fontBold: PDFFont,
+): number {
+  page.drawText(label.toUpperCase(), {
+    x: MARGIN,
+    y: y - 10,
+    size: 7.5,
+    font: fontBold,
+    color: MUTED,
+  });
+  const wrapped = wrap(value, 88);
+  let row = y - 24;
+  for (const line of wrapped) {
+    page.drawText(line, {
+      x: MARGIN,
+      y: row,
+      size: 9.5,
+      font,
+      color: INK,
+    });
+    row -= 13;
+  }
+  return row - 4;
+}
+
+function wrap(text: string, max: number): string[] {
+  const out: string[] = [];
+  let buf = "";
+  for (const word of text.split(/\s+/)) {
+    if ((buf + " " + word).trim().length > max) {
+      out.push(buf.trim());
+      buf = word;
+    } else {
+      buf = buf ? buf + " " + word : word;
+    }
+  }
+  if (buf) out.push(buf.trim());
+  return out;
+}
+
