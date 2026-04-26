@@ -8,7 +8,11 @@ import {
   jurisdictionFromFips,
   SUPPORTED_FIPS,
 } from "./jurisdictions";
-import { type InspectorWithSlot, inspectorsForFips } from "./inspectors";
+import {
+  type InspectorWithSlot,
+  inspectorsForFips,
+  isCountyMonopoly,
+} from "./inspectors";
 import {
   type SurfaceWaterResult,
   surfaceWaterCheck,
@@ -31,6 +35,16 @@ export type LookupSuccess = {
   tosRequired: boolean;
   tosReason: string;
   closingRisk: ClosingRisk | null;
+  // ─── Operating-model flag for the result UX ───
+  // True when the only inspectors available are county offices (BLDHD).
+  // The result panel switches to a wait-management UX in this case.
+  isCountyMonopoly: boolean;
+  // Pre-computed validity expirations against today.
+  // "If we book today, your eval is good through April 2029."
+  validity: {
+    evalValidUntil: string;       // ISO date — eval valid for jurisdiction.evalValidityYears
+    waterTestValidUntil: string;  // ISO date — water test valid for jurisdiction.waterTestValidityMonths
+  };
 };
 
 export type LookupFailure = {
@@ -108,6 +122,17 @@ export async function runLookup(input: LookupInput): Promise<LookupResult> {
     }
   }
 
+  // Validity windows from today
+  const today = new Date();
+  const evalValidUntil = new Date(today);
+  evalValidUntil.setFullYear(
+    evalValidUntil.getFullYear() + jurisdiction.evalValidityYears,
+  );
+  const waterTestValidUntil = new Date(today);
+  waterTestValidUntil.setMonth(
+    waterTestValidUntil.getMonth() + jurisdiction.waterTestValidityMonths,
+  );
+
   return {
     ok: true,
     matchedAddress: geo.matchedAddress,
@@ -121,6 +146,11 @@ export async function runLookup(input: LookupInput): Promise<LookupResult> {
     tosRequired,
     tosReason,
     closingRisk,
+    isCountyMonopoly: isCountyMonopoly(geo.countyFips),
+    validity: {
+      evalValidUntil: evalValidUntil.toISOString(),
+      waterTestValidUntil: waterTestValidUntil.toISOString(),
+    },
   };
 }
 

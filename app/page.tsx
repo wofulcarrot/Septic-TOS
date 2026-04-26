@@ -551,6 +551,14 @@ function ResultPanel({
         <p className="text-sm sm:text-base text-white/80 leading-relaxed">{result.tosReason}</p>
       </div>
 
+      {/* Validity windows — strategic info, not just compliance */}
+      <ValidityStrip
+        evalValidUntil={result.validity.evalValidUntil}
+        waterTestValidUntil={result.validity.waterTestValidUntil}
+        evalYears={result.jurisdiction.evalValidityYears}
+        waterMonths={result.jurisdiction.waterTestValidityMonths}
+      />
+
       {/* Closing risk banner */}
       {result.closingRisk && (
         <ClosingRiskBanner
@@ -560,30 +568,100 @@ function ResultPanel({
         />
       )}
 
-      {/* Inspectors */}
+      {/* BLDHD wait-management warning — only for county-monopoly jurisdictions */}
+      {result.isCountyMonopoly && result.jurisdiction.peakSeasonWaitText && (
+        <div
+          className="rounded-xl border p-5 sm:p-6"
+          style={{
+            background: "linear-gradient(135deg, rgba(234,179,8,0.06) 0%, rgba(15,25,35,0.6) 100%)",
+            borderColor: "rgba(234,179,8,0.3)",
+          }}
+        >
+          <div
+            className="text-[11px] tracking-[2.5px] uppercase mb-2 font-medium"
+            style={{ color: "#fde68a", fontFamily: "var(--font-space-grotesk)" }}
+          >
+            Heads up — government monopoly
+          </div>
+          <h3
+            className="text-base sm:text-lg font-semibold text-white tracking-[-0.3px] mb-2"
+            style={{ fontFamily: "var(--font-space-grotesk)" }}
+          >
+            {result.jurisdiction.authorityShortName} doesn&apos;t allow private inspectors.
+          </h3>
+          <p className="text-sm text-white/75 leading-relaxed mb-3">
+            {result.jurisdiction.peakSeasonWaitText}
+          </p>
+          <p className="text-sm text-white/65 leading-relaxed">
+            <span className="text-white font-medium">Pro move:</span> submit the application the day you sign the listing — not the day you find a buyer. The 3-year evaluation validity covers the marketing window.
+          </p>
+        </div>
+      )}
+
+      {/* Inspectors / Application — branches on operating model */}
       {result.inspectors.length > 0 && (
         <div>
           <div
-            className="text-[11px] tracking-[2.5px] uppercase mb-3 font-medium"
+            className="text-[11px] tracking-[2.5px] uppercase mb-3 font-medium flex items-center gap-3 flex-wrap"
             style={{ color: COPPER, fontFamily: "var(--font-space-grotesk)" }}
           >
-            Available inspectors · {result.inspectors.length}
+            {result.isCountyMonopoly
+              ? "Submit to the county"
+              : `Available inspectors · ${result.inspectors.length}`}
+            {!result.isCountyMonopoly && result.inspectors.some((i) => i.isRealRoster) && (
+              <span
+                className="px-2 py-0.5 rounded text-[9px] tracking-[1.5px] font-medium"
+                style={{
+                  background: "rgba(34,197,94,0.1)",
+                  color: "#86efac",
+                  border: "1px solid rgba(34,197,94,0.3)",
+                }}
+              >
+                ✓ GTCHD Certified Roster
+              </span>
+            )}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className={`grid grid-cols-1 ${result.isCountyMonopoly ? "" : "sm:grid-cols-3"} gap-3`}>
             {result.inspectors.map((insp) => {
               const isBooking = bookingInspectorId === insp.id;
               const isOtherBooking = bookingInspectorId !== null && !isBooking;
+              const isCounty = insp.isCountyOffice === true;
               return (
                 <div
                   key={insp.id}
-                  className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 transition flex flex-col"
-                  style={{ opacity: isOtherBooking ? 0.45 : 1 }}
+                  className="rounded-xl border bg-white/[0.02] p-5 transition flex flex-col"
+                  style={{
+                    opacity: isOtherBooking ? 0.45 : 1,
+                    borderColor: isCounty
+                      ? "rgba(234,179,8,0.25)"
+                      : "rgba(255,255,255,0.08)",
+                    background: isCounty
+                      ? "linear-gradient(135deg, rgba(234,179,8,0.04) 0%, rgba(15,25,35,0.5) 100%)"
+                      : "rgba(255,255,255,0.02)",
+                  }}
                 >
-                  <div
-                    className="text-[10px] tracking-[2px] uppercase text-white/40 mb-2"
-                    style={{ fontFamily: "var(--font-space-grotesk)" }}
-                  >
-                    Earliest · {relativeDate(insp.daysFromToday)} · {insp.slotLabel}
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <div
+                      className="text-[10px] tracking-[2px] uppercase text-white/40"
+                      style={{ fontFamily: "var(--font-space-grotesk)" }}
+                    >
+                      {isCounty
+                        ? `Queue today · review in ~${insp.daysFromToday} business days`
+                        : `Earliest · ${relativeDate(insp.daysFromToday)} · ${insp.slotLabel}`}
+                    </div>
+                    {insp.isRealRoster && !isCounty && (
+                      <span
+                        className="px-1.5 py-0.5 rounded text-[8px] tracking-[1.2px] font-medium"
+                        style={{
+                          background: "rgba(34,197,94,0.1)",
+                          color: "#86efac",
+                          border: "1px solid rgba(34,197,94,0.25)",
+                          fontFamily: "var(--font-space-grotesk)",
+                        }}
+                      >
+                        CERTIFIED
+                      </span>
+                    )}
                   </div>
                   <div
                     className="text-base font-semibold text-white tracking-[-0.3px] mb-1"
@@ -595,6 +673,16 @@ function ResultPanel({
                   <div className="text-xs text-white/40 space-y-0.5 mb-4 flex-1">
                     <div>{insp.phone}</div>
                     <div className="truncate">{insp.email}</div>
+                    {insp.website && (
+                      <a
+                        href={insp.website}
+                        target="_blank"
+                        rel="noopener"
+                        className="text-white/50 hover:text-[#E07A2F] transition truncate block"
+                      >
+                        {insp.website.replace(/^https?:\/\//, "")} ↗
+                      </a>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -610,9 +698,11 @@ function ResultPanel({
                     }}
                   >
                     {isBooking
-                      ? "Creating booking…"
+                      ? "Submitting…"
                       : !realtorNamePresent
-                      ? "Add realtor name to book →"
+                      ? "Add realtor name first →"
+                      : isCounty
+                      ? "Submit application →"
                       : "Book this slot →"}
                   </button>
                 </div>
@@ -681,6 +771,80 @@ function DataCard({
         {value}
       </div>
       {sub && <div className={`text-white/55 leading-snug ${subClass || "text-sm"}`}>{sub}</div>}
+    </div>
+  );
+}
+
+function ValidityStrip({
+  evalValidUntil,
+  waterTestValidUntil,
+  evalYears,
+  waterMonths,
+}: {
+  evalValidUntil: string;
+  waterTestValidUntil: string;
+  evalYears: number;
+  waterMonths: number;
+}) {
+  const evalDt = new Date(evalValidUntil);
+  const waterDt = new Date(waterTestValidUntil);
+  const fmt = (d: Date) =>
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+  return (
+    <div
+      className="rounded-xl border p-5 grid grid-cols-1 sm:grid-cols-2 gap-4"
+      style={{
+        background: "rgba(255,255,255,0.02)",
+        borderColor: "rgba(255,255,255,0.06)",
+      }}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className="w-1 self-stretch rounded-full"
+          style={{ background: COPPER, opacity: 0.6 }}
+        />
+        <div>
+          <div
+            className="text-[10px] tracking-[2px] uppercase text-white/40 mb-1"
+            style={{ fontFamily: "var(--font-space-grotesk)" }}
+          >
+            Septic eval — valid {evalYears} {evalYears === 1 ? "year" : "years"}
+          </div>
+          <div
+            className="text-base font-semibold text-white tracking-[-0.3px]"
+            style={{ fontFamily: "var(--font-space-grotesk)" }}
+          >
+            Good through {fmt(evalDt)}
+          </div>
+          <div className="text-xs text-white/55 mt-0.5">
+            Covers any closing inside that window — re-use for repeat sales.
+          </div>
+        </div>
+      </div>
+      <div className="flex items-start gap-3">
+        <div
+          className="w-1 self-stretch rounded-full"
+          style={{ background: "#86efac", opacity: 0.6 }}
+        />
+        <div>
+          <div
+            className="text-[10px] tracking-[2px] uppercase text-white/40 mb-1"
+            style={{ fontFamily: "var(--font-space-grotesk)" }}
+          >
+            Water test — valid {waterMonths} months
+          </div>
+          <div
+            className="text-base font-semibold text-white tracking-[-0.3px]"
+            style={{ fontFamily: "var(--font-space-grotesk)" }}
+          >
+            Good through {fmt(waterDt)}
+          </div>
+          <div className="text-xs text-white/55 mt-0.5">
+            Shorter window — bacterial counts shift seasonally.
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

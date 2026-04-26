@@ -20,6 +20,20 @@ export type Jurisdiction = {
   surfaceWaterRule: boolean;
   ruleSummary: string;
   websiteUrl: string;
+  // ─── Validity windows (sourced from MI POS-ordinance reporting) ───
+  // Septic evaluation is good for `evalValidityYears` from inspection date
+  // (3 years across BLDHD + GTCHD). Water tests are shorter due to
+  // bacterial volatility (6 months).
+  evalValidityYears: number;
+  waterTestValidityMonths: number;
+  // ─── Operating model ───
+  // "private"  — county allows third-party Certified Evaluators (GT)
+  // "monopoly" — only county sanitarians can inspect (BLDHD)
+  // "mixed"    — both private and county-office options exist
+  inspectorModel: "private" | "monopoly" | "mixed";
+  // Best-effort published wait time during peak season — used by the
+  // result-panel UX to set realtor expectations.
+  peakSeasonWaitText?: string;
 };
 
 export const JURISDICTIONS: Record<string, Jurisdiction> = {
@@ -42,6 +56,10 @@ export const JURISDICTIONS: Record<string, Jurisdiction> = {
     ruleSummary:
       "TOS inspection required if the property is within 300 ft of surface water (West Bay, East Bay, inland lakes, or perennial streams).",
     websiteUrl: "https://www.gtchd.org/206/Environmental-Health",
+    evalValidityYears: 3,
+    waterTestValidityMonths: 6,
+    inspectorModel: "private",
+    peakSeasonWaitText: "Most certified evaluators have slots within 1–2 weeks.",
   },
   "26089": {
     countyName: "Leelanau County",
@@ -62,6 +80,11 @@ export const JURISDICTIONS: Record<string, Jurisdiction> = {
     ruleSummary:
       "TOS inspection required for every property transfer in Leelanau County, regardless of proximity to surface water.",
     websiteUrl: "https://bldhd.org/environmental-health/",
+    evalValidityYears: 3,
+    waterTestValidityMonths: 6,
+    inspectorModel: "monopoly",
+    peakSeasonWaitText:
+      "Official: 6 business days inspection + 11 days report. Peak season (May–Sept): closer to 30 days. No expedite option.",
   },
   "26009": {
     countyName: "Antrim County",
@@ -82,6 +105,10 @@ export const JURISDICTIONS: Record<string, Jurisdiction> = {
     ruleSummary:
       "TOS inspection required countywide for every property with an onsite septic system at the time of sale.",
     websiteUrl: "https://nwhealth.org/eh.html",
+    evalValidityYears: 3,
+    waterTestValidityMonths: 6,
+    inspectorModel: "mixed",
+    peakSeasonWaitText: "Mixed model — private contractors typically schedule within 1–2 weeks.",
   },
 };
 
