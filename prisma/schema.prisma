@@ -1,0 +1,97 @@
+// Septic TOS Coordinator — Prisma schema
+// SQLite for the POC; will move to Postgres for production.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Jurisdiction = the governing health authority for a county.
+// Day 1: 3 priority counties hard-coded into a static map; the table
+// exists so Day 2+ persistence drops in without a migration shuffle.
+// ───────────────────────────────────────────────────────────────────
+model Jurisdiction {
+  id                String      @id @default(cuid())
+  countyName        String      // "Grand Traverse"
+  countyFips        String      @unique // "26055"
+  authorityCode     String      @unique // "GTCHD"
+  authorityName     String      // "Grand Traverse County Health Department"
+  formName          String      // "GTCHD Form 4-B — Time-of-Sale Septic Inspection"
+  feeUSD            Int         // 38500 (cents) — store as cents to avoid float drift
+  feeIsEstimate     Boolean     @default(true)
+  submissionMethod  String      // "PDF" | "Online portal" | "Email"
+  notes             String?     // "TOS rule applies within 300 ft of surface water"
+  inspectors        Inspector[]
+  bookings          Booking[]
+  properties        Property[]
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Inspector = a pumper/inspector certified in one or more counties.
+// Day 1 stores 2-3 stubs per jurisdiction with a hard-coded "earliest
+// available" slot; Day 2 introduces real availability windows.
+// ───────────────────────────────────────────────────────────────────
+model Inspector {
+  id                  String        @id @default(cuid())
+  name                String
+  company             String
+  phone               String?
+  email               String?
+  earliestAvailable   DateTime
+  jurisdiction        Jurisdiction  @relation(fields: [jurisdictionId], references: [id])
+  jurisdictionId      String
+  bookings            Booking[]
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Property = a real address resolved through the Census Geocoder.
+// Day 1 not persisted; Day 2 caches the geocode result so we don't
+// re-call the Census API for repeat lookups.
+// ───────────────────────────────────────────────────────────────────
+model Property {
+  id                  String        @id @default(cuid())
+  rawAddress          String
+  formattedAddress    String?
+  latitude            Float?
+  longitude           Float?
+  countyFips          String?
+  withinSurfaceWater  Boolean?      // 300-ft GT rule
+  jurisdiction        Jurisdiction? @relation(fields: [jurisdictionId], references: [id])
+  jurisdictionId      String?
+  bookings            Booking[]
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Booking = a realtor's request for a TOS inspection on a property
+// against a target closing date. Day 1 not persisted; Day 2 wires up
+// the Stripe checkout + slot picker against this model.
+// ───────────────────────────────────────────────────────────────────
+model Booking {
+  id                  String        @id @default(cuid())
+  realtorName         String
+  realtorEmail        String?
+  realtorPhone        String?
+  closingDate         DateTime
+  property            Property      @relation(fields: [propertyId], references: [id])
+  propertyId          String
+  jurisdiction        Jurisdiction  @relation(fields: [jurisdictionId], references: [id])
+  jurisdictionId      String
+  inspector           Inspector?    @relation(fields: [inspectorId], references: [id])
+  inspectorId         String?
+  scheduledFor        DateTime?
+  status              String        @default("draft") // draft | booked | in_progress | certified | submitted | accepted
+  stripePaymentId     String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+}

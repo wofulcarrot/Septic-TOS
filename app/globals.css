@@ -1,26 +1,101 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ───────────────────────────────────────────────────────────────────
+   Traverse brand tokens — navy + copper palette, Space Grotesk + Inter.
+   Mirrors /docs/superpowers/prototypes/2026-04-21-homepage.html
+   ─────────────────────────────────────────────────────────────────── */
+
+@theme {
+  --color-navy: #1B2A4A;
+  --color-navy-deep: #0F1923;
+  --color-navy-deeper: #0A1420;
+  --color-navy-deepest: #05090E;
+  --color-copper: #E07A2F;
+  --color-copper-light: #FFB175;
+  --color-copper-dim: rgba(224, 122, 47, 0.12);
+  --color-text: #E8ECF1;
+  --color-text-muted: #A8B4C2;
+  --color-text-dim: #7B8CA0;
+  --color-text-dimmer: #5A6876;
+  --color-border: rgba(255, 255, 255, 0.06);
+
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background:
+    radial-gradient(ellipse at 78% 8%, rgba(224, 122, 47, 0.10) 0%, transparent 45%),
+    radial-gradient(ellipse at 18% 100%, rgba(27, 42, 74, 0.55) 0%, transparent 50%),
+    linear-gradient(180deg, #0F1923 0%, #060A10 100%);
+  background-attachment: fixed;
+}
+
+/* Focus rings tuned for the dark palette */
+:focus-visible {
+  outline: 2px solid rgb(224 122 47 / 0.7);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Smooth fade-in for the result panel */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fade-up {
+  animation: fadeUp 0.45s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* Pulsing dot for the "live" indicator */
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+.pulse-dot {
+  animation: pulseDot 2s ease-in-out infinite;
+}
+
+/* Subtle constellation — used in the hero */
+@keyframes drawLine {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 1; }
+}
+.twinkle {
+  animation: twinkle 3.5s ease-in-out infinite;
+}
+.draw-line {
+  stroke-dasharray: 220;
+  stroke-dashoffset: 220;
+  animation: drawLine 3.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Loader spinner */
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.spin-slow {
+  animation: spinSlow 0.9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-up,
+  .pulse-dot,
+  .twinkle,
+  .draw-line,
+  .spin-slow {
+    animation: none !important;
+  }
 }
