@@ -82,16 +82,32 @@ model Booking {
   realtorName         String
   realtorEmail        String?
   realtorPhone        String?
-  closingDate         DateTime
+  closingDate         DateTime?     // optional — realtor may book without a closing date
   property            Property      @relation(fields: [propertyId], references: [id])
   propertyId          String
   jurisdiction        Jurisdiction  @relation(fields: [jurisdictionId], references: [id])
   jurisdictionId      String
   inspector           Inspector?    @relation(fields: [inspectorId], references: [id])
   inspectorId         String?
+  // Denormalized inspector display fields — sourced from the static
+  // INSPECTORS map. We persist the snapshot so changes to the static
+  // roster don't break historical bookings.
+  inspectorStaticId   String?       // "insp-gt-01"
+  inspectorName       String?
+  inspectorCompany    String?
+  inspectorPhone      String?
+  inspectorEmail      String?
+  inspectorSlotLabel  String?       // "Mon, Apr 28 · 8:00 AM"
   scheduledFor        DateTime?
-  status              String        @default("draft") // draft | booked | in_progress | certified | submitted | accepted
+  // Status flow:
+  // draft (created) → pending_payment (Stripe session opened) →
+  // booked (paid) → en_route → arrived → inspected_pass / inspected_fail →
+  // certified → submitted → accepted
+  status              String        @default("draft")
+  stripeSessionId     String?
   stripePaymentId     String?
+  feeUSDPaid          Int?          // dollars (not cents) — what was actually paid
+  notes               String?       // internal notes for the pumper
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 }

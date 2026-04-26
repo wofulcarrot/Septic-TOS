@@ -119,7 +119,10 @@ function relativeDate(daysFromToday: number) {
 export default function Home() {
   const [address, setAddress] = useState("");
   const [closingDate, setClosingDate] = useState("");
+  const [realtorName, setRealtorName] = useState("");
+  const [realtorEmail, setRealtorEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [bookingInspectorId, setBookingInspectorId] = useState<string | null>(null);
   const [result, setResult] = useState<LookupResult | null>(null);
 
   async function handleCheck(e?: React.FormEvent) {
@@ -143,6 +146,55 @@ export default function Home() {
       });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleBook(inspectorStaticId: string) {
+    if (!result || !result.ok) return;
+    if (!realtorName.trim()) {
+      // Scroll to realtor field and let the browser focus it
+      const el = document.getElementById("realtor-name");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        (el as HTMLInputElement).focus();
+      }
+      return;
+    }
+
+    setBookingInspectorId(inspectorStaticId);
+
+    const insp = result.inspectors.find((i) => i.id === inspectorStaticId);
+
+    try {
+      const res = await fetch("/api/book", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          realtorName: realtorName.trim(),
+          realtorEmail: realtorEmail.trim() || undefined,
+          closingDate: closingDate || undefined,
+          property: {
+            rawAddress: address.trim(),
+            formattedAddress: result.matchedAddress,
+            latitude: result.latitude,
+            longitude: result.longitude,
+            countyFips: result.countyFips,
+            withinSurfaceWater: result.surfaceWater?.isWithin ?? null,
+          },
+          inspectorStaticId,
+          inspectorScheduledFor: insp?.earliestAvailable.toISOString(),
+        }),
+      });
+      const data = await res.json();
+      if (data.ok && data.bookingId) {
+        window.location.href = `/booking/${data.bookingId}`;
+      } else {
+        alert(data.message ?? "Booking failed. Try again.");
+        setBookingInspectorId(null);
+      }
+    } catch {
+      alert("Couldn't reach the server. Try again.");
+      setBookingInspectorId(null);
     }
   }
 
@@ -245,6 +297,42 @@ export default function Home() {
               />
             </label>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="block">
+                <span
+                  className="block text-[11px] tracking-[2px] uppercase text-white/50 mb-2"
+                  style={{ fontFamily: "var(--font-space-grotesk)" }}
+                >
+                  Realtor name{" "}
+                  <span className="text-white/30 normal-case tracking-normal text-[10px]">(needed to book)</span>
+                </span>
+                <input
+                  id="realtor-name"
+                  type="text"
+                  value={realtorName}
+                  onChange={(e) => setRealtorName(e.target.value)}
+                  placeholder="e.g., Sarah Mitchell"
+                  className="w-full px-4 py-3.5 bg-white/[0.04] border border-white/[0.1] rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:border-[#E07A2F]/50 focus:bg-white/[0.06] transition"
+                />
+              </label>
+              <label className="block">
+                <span
+                  className="block text-[11px] tracking-[2px] uppercase text-white/50 mb-2"
+                  style={{ fontFamily: "var(--font-space-grotesk)" }}
+                >
+                  Realtor email{" "}
+                  <span className="text-white/30 normal-case tracking-normal text-[10px]">(optional)</span>
+                </span>
+                <input
+                  type="email"
+                  value={realtorEmail}
+                  onChange={(e) => setRealtorEmail(e.target.value)}
+                  placeholder="sarah@aspirenorth.com"
+                  className="w-full px-4 py-3.5 bg-white/[0.04] border border-white/[0.1] rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:border-[#E07A2F]/50 focus:bg-white/[0.06] transition"
+                />
+              </label>
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-end">
               <label className="block flex-1">
                 <span
@@ -304,7 +392,12 @@ export default function Home() {
       {/* Results */}
       {result && (
         <section className="max-w-5xl mx-auto px-6 sm:px-10 pb-24">
-          <ResultPanel result={result} />
+          <ResultPanel
+            result={result}
+            onBook={handleBook}
+            bookingInspectorId={bookingInspectorId}
+            realtorNamePresent={!!realtorName.trim()}
+          />
         </section>
       )}
 
@@ -337,7 +430,17 @@ export default function Home() {
 // Result panel — renders LookupSuccess or LookupFailure
 // ───────────────────────────────────────────────────────────────────
 
-function ResultPanel({ result }: { result: LookupResult }) {
+function ResultPanel({
+  result,
+  onBook,
+  bookingInspectorId,
+  realtorNamePresent,
+}: {
+  result: LookupResult;
+  onBook: (inspectorStaticId: string) => void;
+  bookingInspectorId: string | null;
+  realtorNamePresent: boolean;
+}) {
   if (!result.ok) {
     return (
       <div
@@ -467,30 +570,54 @@ function ResultPanel({ result }: { result: LookupResult }) {
             Available inspectors · {result.inspectors.length}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {result.inspectors.map((insp) => (
-              <div
-                key={insp.id}
-                className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 hover:border-[#E07A2F]/30 hover:bg-[#E07A2F]/[0.03] transition"
-              >
+            {result.inspectors.map((insp) => {
+              const isBooking = bookingInspectorId === insp.id;
+              const isOtherBooking = bookingInspectorId !== null && !isBooking;
+              return (
                 <div
-                  className="text-[10px] tracking-[2px] uppercase text-white/40 mb-2"
-                  style={{ fontFamily: "var(--font-space-grotesk)" }}
+                  key={insp.id}
+                  className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 transition flex flex-col"
+                  style={{ opacity: isOtherBooking ? 0.45 : 1 }}
                 >
-                  Earliest · {relativeDate(insp.daysFromToday)} · {insp.slotLabel}
+                  <div
+                    className="text-[10px] tracking-[2px] uppercase text-white/40 mb-2"
+                    style={{ fontFamily: "var(--font-space-grotesk)" }}
+                  >
+                    Earliest · {relativeDate(insp.daysFromToday)} · {insp.slotLabel}
+                  </div>
+                  <div
+                    className="text-base font-semibold text-white tracking-[-0.3px] mb-1"
+                    style={{ fontFamily: "var(--font-space-grotesk)" }}
+                  >
+                    {insp.name}
+                  </div>
+                  <div className="text-sm text-white/70 mb-3">{insp.company}</div>
+                  <div className="text-xs text-white/40 space-y-0.5 mb-4 flex-1">
+                    <div>{insp.phone}</div>
+                    <div className="truncate">{insp.email}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onBook(insp.id)}
+                    disabled={isBooking || isOtherBooking}
+                    className="w-full px-4 py-2.5 rounded-lg text-sm font-medium transition disabled:cursor-not-allowed"
+                    style={{
+                      background: isBooking ? "rgba(224,122,47,0.4)" : COPPER,
+                      color: "white",
+                      boxShadow: isBooking
+                        ? "none"
+                        : "0 4px 20px rgba(224,122,47,0.25)",
+                    }}
+                  >
+                    {isBooking
+                      ? "Creating booking…"
+                      : !realtorNamePresent
+                      ? "Add realtor name to book →"
+                      : "Book this slot →"}
+                  </button>
                 </div>
-                <div
-                  className="text-base font-semibold text-white tracking-[-0.3px] mb-1"
-                  style={{ fontFamily: "var(--font-space-grotesk)" }}
-                >
-                  {insp.name}
-                </div>
-                <div className="text-sm text-white/70 mb-3">{insp.company}</div>
-                <div className="text-xs text-white/40 space-y-0.5">
-                  <div>{insp.phone}</div>
-                  <div className="truncate">{insp.email}</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
