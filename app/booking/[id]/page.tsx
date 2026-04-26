@@ -4,9 +4,11 @@
 
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { TraverseLogo } from "@/app/components/TraverseLogo";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { CopyLinkButton } from "@/app/components/CopyLinkButton";
+import { PaymentSection } from "@/app/components/PaymentSection";
 
 export const dynamic = "force-dynamic";
 
@@ -104,6 +106,16 @@ export default async function BookingPage({
             {booking.property.formattedAddress ?? booking.property.rawAddress}
           </p>
         </div>
+
+        {/* Payment section — top of fold, prominent CTA */}
+        <Suspense fallback={null}>
+          <PaymentSection
+            bookingId={booking.id}
+            status={booking.status}
+            feeUSD={booking.jurisdiction.feeUSD}
+            feeUSDPaid={booking.feeUSDPaid}
+          />
+        </Suspense>
 
         {/* Status banner */}
         <div
